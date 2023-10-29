@@ -2,6 +2,9 @@
 
 typedef struct _guid
 {
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(_guid, Data1, Data2, Data3, Data4);
+    MSGPACK_DEFINE(Data1, Data2, Data3, Data4);
+
     unsigned long Data1;
     unsigned short Data2;
     unsigned short Data3;
@@ -15,6 +18,9 @@ class Shape : public hbann::IStreamable
     STREAMABLE_DEFINE(IStreamable, mType, mID);
 
   public:
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(Shape, mType, mID);
+    MSGPACK_DEFINE(mType, mID);
+
     enum class Type : uint8_t
     {
         NONE,
@@ -47,11 +53,32 @@ class Shape : public hbann::IStreamable
     guid mID{};
 };
 
+MSGPACK_ADD_ENUM(Shape::Type);
+
 class Circle : public Shape
 {
     STREAMABLE_DEFINE(Shape, mSVG, mURL);
 
   public:
+    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Circle, Shape, mSVG, mURL);
+
+    template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
+    {
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL.native()).msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(object const &msgpack_o)
+    {
+        std::filesystem::path::string_type url;
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, url).msgpack_unpack(msgpack_o);
+        mURL.assign(url);
+    }
+
+    template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
+    {
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL).msgpack_object(msgpack_o, msgpack_z);
+    }
+
     Circle() = default;
     Circle(const guid &aID, const std::string &aSVG, const std::filesystem::path &aURL)
         : Shape(Type::CIRCLE, aID), mSVG(aSVG), mURL(aURL)
@@ -73,6 +100,23 @@ class Sphere : public Circle
     STREAMABLE_DEFINE(Circle, mReflexion, mTuple);
 
   public:
+    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Sphere, Circle, mReflexion);
+
+    template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
+    {
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(object const &msgpack_o)
+    {
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_unpack(msgpack_o);
+    }
+
+    template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
+    {
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_object(msgpack_o, msgpack_z);
+    }
+
     Sphere() = default;
     Sphere(const Circle &aCircle, const bool aReflexion, std::tuple<std::string, std::list<int>> &&aTuple)
         : Circle(aCircle), mReflexion(aReflexion), mTuple(std::move(aTuple))
@@ -94,6 +138,23 @@ class RectangleEx : public Shape
     STREAMABLE_DEFINE(Shape, mCenter, mCells);
 
   public:
+    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(RectangleEx, Shape, mCenter, mCells);
+
+    template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
+    {
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(object const &msgpack_o)
+    {
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_unpack(msgpack_o);
+    }
+
+    template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
+    {
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_object(msgpack_o, msgpack_z);
+    }
+
     RectangleEx() = default;
     RectangleEx(const guid &aID, const Sphere &aCenter, const std::vector<std::vector<std::wstring>> &aCells)
         : Shape(Type::RECTANGLE, aID), mCenter(aCenter), mCells(aCells)
@@ -132,6 +193,77 @@ class Context : public hbann::IStreamable
     STREAMABLE_DEFINE(IStreamable, mShapes);
 
   public:
+    friend void to_json(nlohmann::json &nlohmann_json_j, const Context &nlohmann_json_t)
+    {
+        json jsonArray = json::array();
+        for (auto &shape : nlohmann_json_t.mShapes)
+        {
+            json json;
+            switch (shape->GetType())
+            {
+            case Shape::Type::CIRCLE:
+                to_json(json, *(Circle *)shape);
+                break;
+
+            case Shape::Type::RECTANGLE:
+                to_json(json, *(RectangleEx *)shape);
+                break;
+            }
+
+            jsonArray.push_back(json);
+        }
+
+        nlohmann_json_j["mShapes"] = jsonArray;
+    }
+
+    friend void from_json(const nlohmann::json &nlohmann_json_j, Context &nlohmann_json_t)
+    {
+        for (auto &shapeJSON : nlohmann_json_j.at("mShapes"))
+        {
+            Shape *shapeDerived{};
+            switch (shapeJSON.at("mType").get<Shape::Type>())
+            {
+            case Shape::Type::CIRCLE: {
+                shapeDerived = new Circle;
+                from_json(shapeJSON, *(Circle *)shapeDerived);
+
+                break;
+            }
+
+            case Shape::Type::RECTANGLE: {
+                shapeDerived = new RectangleEx;
+                from_json(shapeJSON, *(RectangleEx *)shapeDerived);
+
+                break;
+            }
+            }
+
+            nlohmann_json_t.mShapes.push_back(shapeDerived);
+        }
+    }
+
+    template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
+    {
+        // HARDCODED bcz MSG_PACK is GARBAGE
+        type::make_define_array(*(Circle *)mShapes.front(), *(RectangleEx *)mShapes.back()).msgpack_pack(msgpack_pk);
+    }
+
+    void msgpack_unpack(object const &msgpack_o)
+    {
+        // HARDCODED bcz MSG_PACK is GARBAGE
+        auto shapeFront = new Circle;
+        auto shapeBack = new RectangleEx;
+        type::make_define_array(*shapeFront, *shapeBack).msgpack_unpack(msgpack_o);
+
+        mShapes.push_back(shapeFront);
+        mShapes.push_back(shapeBack);
+    }
+
+    template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
+    {
+        type::make_define_array(mShapes).msgpack_object(msgpack_o, msgpack_z);
+    }
+
     Context() = default;
     Context(std::vector<Shape *> &&aShapes) : mShapes(std::move(aShapes))
     {
@@ -353,6 +485,76 @@ TEST_CASE("IStreamable", "[IStreamable]")
 
         REQUIRE(contextStart == contextEnd);
     }
+}
+
+TEST_CASE("Benchmarks", "[Benchmarks]")
+{
+    std::string circleSVG{};
+    for (size_t i = 0; i < 999; i++)
+    {
+        circleSVG += "SVGSVGSVG";
+    }
+
+    std::wstring circleURL{};
+    for (size_t i = 0; i < 666; i++)
+    {
+        circleURL += L"URL\\SHIT\\";
+    }
+
+    std::vector<std::vector<std::wstring>> cells{};
+    for (size_t i = 0; i < 333; i++)
+    {
+        cells.push_back({L"Streamable e sefu la bani!", L"penguinz0 - Goofy evening"});
+        cells.push_back({L"Parazitii - Standarde (nr.42)", L"Parazitii - Asa cum vreau (nr.92)"});
+    }
+
+    Sphere center({GUID_RND, circleSVG, circleURL}, true);
+    std::vector<Shape *> shapes{
+        new Circle(GUID_RND, circleSVG, circleURL),
+        new RectangleEx(GUID_RND, center, cells),
+    };
+    ::Context contextStart(std::move(shapes));
+
+    BENCHMARK("Streamable")
+    {
+        ::Context contextEnd;
+        contextEnd.Deserialize(contextStart.Serialize());
+
+        REQUIRE(contextStart == contextEnd);
+    };
+
+    const auto view = contextStart.Serialize().View();
+    std::cout << std::endl << std::format("Streamable stream had {} bytes.", view.size()) << std::endl;
+
+    BENCHMARK("JSON")
+    {
+        json json;
+        to_json(json, contextStart);
+
+        ::Context contextEnd;
+        from_json(json, contextEnd);
+
+        REQUIRE(contextStart == contextEnd);
+    };
+
+    json json;
+    to_json(json, contextStart);
+    std::cout << std::endl << std::format("JSON stream had {} bytes.", to_string(json).size()) << std::endl;
+
+    BENCHMARK("MsgPack")
+    {
+        sbuffer stream;
+        pack(stream, contextStart);
+
+        auto contextObject(unpack(stream.data(), stream.size()));
+        ::Context contextEnd(contextObject->as<::Context>());
+
+        REQUIRE(contextStart == contextEnd);
+    };
+
+    sbuffer stream;
+    pack(stream, contextStart);
+    std::cout << std::endl << std::format("MsgPack stream had {} bytes.", stream.size()) << std::endl;
 }
 
 int main(int argc, char **argv)
