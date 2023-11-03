@@ -102,21 +102,21 @@ class Sphere : public Circle
     STREAMABLE_DEFINE(Sphere, STREAMABLE_DEFINE_BASE(Circle), mReflexion, mTuple, mPair);
 
   public:
-    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Sphere, Circle, mReflexion);
+    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Sphere, Circle, mReflexion, mTuple);
 
     template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_pack(msgpack_pk);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(object const &msgpack_o)
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_unpack(msgpack_o);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_unpack(msgpack_o);
     }
 
     template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion).msgpack_object(msgpack_o, msgpack_z);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_object(msgpack_o, msgpack_z);
     }
 
     Sphere() = default;
@@ -543,7 +543,7 @@ TEST_CASE("Benchmarks", "[Benchmarks]")
         cells.push_back({L"Parazitii - Standarde (nr.42)", L"Parazitii - Asa cum vreau (nr.92)"});
     }
 
-    Sphere center({GUID_RND, circleSVG, circleURL}, true);
+    Sphere center({GUID_RND, circleSVG, circleURL}, true, {"Commit: added tuple support", {22, 100}});
     std::vector<Shape *> shapes{
         new Circle(GUID_RND, circleSVG, circleURL),
         new RectangleEx(GUID_RND, center, cells),
