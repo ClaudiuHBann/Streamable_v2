@@ -59,23 +59,50 @@ class Circle : public Shape
     STREAMABLE_DEFINE(Circle, STREAMABLE_DEFINE_BASE(Shape), mSVG, mURL, mVariant);
 
   public:
-    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Circle, Shape, mSVG, mURL);
+    friend void to_json(nlohmann::json &nlohmann_json_j, const Circle &nlohmann_json_t)
+    {
+        nlohmann::to_json(nlohmann_json_j, static_cast<const Shape &>(nlohmann_json_t));
+
+        nlohmann_json_j["mSVG"] = *nlohmann_json_t.mSVG;
+        nlohmann_json_j["mURL"] = nlohmann_json_t.mURL;
+
+        std::visit([&nlohmann_json_j](auto &&arg) { nlohmann_json_j["mVariant"] = arg; }, nlohmann_json_t.mVariant);
+    }
+
+    friend void from_json(const nlohmann::json &nlohmann_json_j, Circle &nlohmann_json_t)
+    {
+        nlohmann::from_json(nlohmann_json_j, static_cast<Shape &>(nlohmann_json_t));
+
+        std::string svg;
+        nlohmann_json_j.at("mSVG").get_to(svg);
+        nlohmann_json_t.mSVG = svg;
+
+        nlohmann_json_j.at("mURL").get_to(nlohmann_json_t.mURL);
+
+        std::vector<double> doubles;
+        nlohmann_json_j.at("mVariant").get_to(doubles);
+        nlohmann_json_t.mVariant = doubles;
+    }
 
     template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
     {
-        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL.native()).msgpack_pack(msgpack_pk);
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL.native(), std::get<std::vector<double>>(mVariant))
+            .msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(object const &msgpack_o)
     {
         std::filesystem::path::string_type url;
-        type::make_define_array(MSGPACK_BASE(Shape), mSVG, url).msgpack_unpack(msgpack_o);
+        std::vector<double> doubles;
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, url, doubles).msgpack_unpack(msgpack_o);
         mURL.assign(url);
+        mVariant = doubles;
     }
 
     template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
     {
-        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL).msgpack_object(msgpack_o, msgpack_z);
+        type::make_define_array(MSGPACK_BASE(Shape), mSVG, mURL, std::get<std::vector<double>>(mVariant))
+            .msgpack_object(msgpack_o, msgpack_z);
     }
 
     Circle() = default;
@@ -102,25 +129,44 @@ class Sphere : public Circle
     STREAMABLE_DEFINE(Sphere, STREAMABLE_DEFINE_BASE(Circle), mReflexion, mTuple, mPair);
 
   public:
-    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(Sphere, Circle, mReflexion, mTuple);
+    friend void to_json(nlohmann::json &nlohmann_json_j, const Sphere &nlohmann_json_t)
+    {
+        nlohmann::to_json(nlohmann_json_j, static_cast<const Circle &>(nlohmann_json_t));
+
+        nlohmann_json_j["mReflexion"] = *nlohmann_json_t.mReflexion;
+        nlohmann_json_j["mTuple"] = nlohmann_json_t.mTuple;
+        nlohmann_json_j["mPair"] = nlohmann_json_t.mPair;
+    }
+
+    friend void from_json(const nlohmann::json &nlohmann_json_j, Sphere &nlohmann_json_t)
+    {
+        nlohmann::from_json(nlohmann_json_j, static_cast<Circle &>(nlohmann_json_t));
+
+        nlohmann_json_j.at("mReflexion").get_to(*nlohmann_json_t.mReflexion);
+        nlohmann_json_j.at("mTuple").get_to(nlohmann_json_t.mTuple);
+        nlohmann_json_j.at("mPair").get_to(nlohmann_json_t.mPair);
+    }
 
     template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_pack(msgpack_pk);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple, mPair).msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(object const &msgpack_o)
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_unpack(msgpack_o);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple, mPair).msgpack_unpack(msgpack_o);
     }
 
     template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
     {
-        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple).msgpack_object(msgpack_o, msgpack_z);
+        type::make_define_array(MSGPACK_BASE(Circle), mReflexion, mTuple, mPair).msgpack_object(msgpack_o, msgpack_z);
     }
 
-    Sphere() = default;
-    Sphere(const Circle &aCircle, std::unique_ptr<bool> &&aReflexion, std::tuple<std::string, std::list<int>> &&aTuple,
+    Sphere() : mReflexion(std::make_unique<bool>())
+    {
+    }
+
+    Sphere(const Circle &aCircle, unique_ptr<bool> &&aReflexion, std::tuple<std::string, std::list<int>> &&aTuple,
            std::pair<Circle, double> &&aPair)
         : Circle(aCircle), mReflexion(std::move(aReflexion)), mTuple(std::move(aTuple)), mPair(std::move(aPair))
     {
@@ -143,21 +189,21 @@ class RectangleEx : public Shape
     STREAMABLE_DEFINE(ReclangleEx, STREAMABLE_DEFINE_BASE(Shape), mCenter, mMap, mCells);
 
   public:
-    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(RectangleEx, Shape, mCenter, mCells);
+    NLOHMANN_DEFINE_DERIVED_TYPE_INTRUSIVE(RectangleEx, Shape, mCenter, mMap, mCells);
 
     template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
     {
-        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_pack(msgpack_pk);
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mMap, mCells).msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(object const &msgpack_o)
     {
-        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_unpack(msgpack_o);
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mMap, mCells).msgpack_unpack(msgpack_o);
     }
 
     template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
     {
-        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mCells).msgpack_object(msgpack_o, msgpack_z);
+        type::make_define_array(MSGPACK_BASE(Shape), mCenter, mMap, mCells).msgpack_object(msgpack_o, msgpack_z);
     }
 
     RectangleEx() = default;
@@ -168,7 +214,8 @@ class RectangleEx : public Shape
 
     bool operator==(const RectangleEx &aRectangle) const
     {
-        return *(Shape *)this == *(Shape *)&aRectangle && mCenter == aRectangle.mCenter && mCells == aRectangle.mCells;
+        return *(Shape *)this == *(Shape *)&aRectangle && mCenter == aRectangle.mCenter && mMap == aRectangle.mMap &&
+               mCells == aRectangle.mCells;
     }
 
   private:
@@ -221,7 +268,7 @@ class Context : public hbann::IStreamable
     friend void to_json(nlohmann::json &nlohmann_json_j, const Context &nlohmann_json_t)
     {
         json jsonArray = json::array();
-        for (auto &shape : nlohmann_json_t.mShapes)
+        for (auto &shape : *nlohmann_json_t.mShapes)
         {
             json json;
             switch (shape->GetType())
@@ -263,14 +310,14 @@ class Context : public hbann::IStreamable
             }
             }
 
-            nlohmann_json_t.mShapes.push_back(shapeDerived);
+            nlohmann_json_t.mShapes->push_back(shapeDerived);
         }
     }
 
     template <typename Packer> void msgpack_pack(Packer &msgpack_pk) const
     {
         // HARDCODED bcz MSG_PACK is GARBAGE
-        type::make_define_array(*(Circle *)mShapes.front(), *(RectangleEx *)mShapes.back()).msgpack_pack(msgpack_pk);
+        type::make_define_array(*(Circle *)mShapes->front(), *(RectangleEx *)mShapes->back()).msgpack_pack(msgpack_pk);
     }
 
     void msgpack_unpack(object const &msgpack_o)
@@ -280,8 +327,8 @@ class Context : public hbann::IStreamable
         auto shapeBack = new RectangleEx;
         type::make_define_array(*shapeFront, *shapeBack).msgpack_unpack(msgpack_o);
 
-        mShapes.push_back(shapeFront);
-        mShapes.push_back(shapeBack);
+        mShapes->push_back(shapeFront);
+        mShapes->push_back(shapeBack);
     }
 
     template <typename MSGPACK_OBJECT> void msgpack_object(MSGPACK_OBJECT *msgpack_o, zone &msgpack_z) const
@@ -289,7 +336,10 @@ class Context : public hbann::IStreamable
         type::make_define_array(mShapes).msgpack_object(msgpack_o, msgpack_z);
     }
 
-    Context() = default;
+    Context() : mShapes(std::make_shared<std::vector<Shape *>>())
+    {
+    }
+
     Context(std::shared_ptr<std::vector<Shape *>> &&aShapes) : mShapes(std::move(aShapes))
     {
     }
@@ -524,13 +574,14 @@ TEST_CASE("IStreamable", "[IStreamable]")
 
 TEST_CASE("Benchmarks", "[Benchmarks]")
 {
-    std::string circleSVG{};
+    std::string circleSVGStr{};
     for (size_t i = 0; i < 999; i++)
     {
-        circleSVG += "SVGSVGSVG";
+        circleSVGStr += "SVGSVGSVG";
     }
+    std::optional<std::string> circleSVG{circleSVGStr};
 
-    std::wstring circleURL{};
+    std::filesystem::path circleURL{};
     for (size_t i = 0; i < 666; i++)
     {
         circleURL += L"URL\\SHIT\\";
@@ -543,11 +594,16 @@ TEST_CASE("Benchmarks", "[Benchmarks]")
         cells.push_back({L"Parazitii - Standarde (nr.42)", L"Parazitii - Asa cum vreau (nr.92)"});
     }
 
-    Sphere center({GUID_RND, circleSVG, circleURL}, true, {"Commit: added tuple support", {22, 100}});
-    std::vector<Shape *> shapes{
-        new Circle(GUID_RND, circleSVG, circleURL),
-        new RectangleEx(GUID_RND, center, cells),
-    };
+    std::variant<std::vector<double>, bool> circleVariant1{std::vector{69., 420.}};
+    std::variant<std::vector<double>, bool> circleVariant2{std::vector{69., 420.}};
+    std::variant<std::vector<double>, bool> circleVariant3{std::vector{69., 420.}};
+
+    Sphere center({GUID_RND, circleSVG, circleURL, std::move(circleVariant2)}, std::make_unique<bool>(true),
+                  {"Commit: added tuple support", {22, 100}},
+                  {{GUID_RND, circleSVG, circleURL, std::move(circleVariant3)}, 69.420});
+    auto shapes = std::make_shared<std::vector<Shape *>>();
+    shapes->push_back(new Circle(GUID_RND, circleSVG, circleURL, std::move(circleVariant1)));
+    shapes->push_back(new RectangleEx(GUID_RND, std::move(center), cells));
     ::Context contextStart(std::move(shapes));
 
     BENCHMARK("Streamable")
