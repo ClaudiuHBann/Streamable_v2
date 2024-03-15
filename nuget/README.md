@@ -1,45 +1,59 @@
 # Streamable
 
-This library is all about speedy data parsing, churning out super small byte streams.
+Fastest, Smallest and Simplest (De)Serializer for C++20 or newer.
 
 ## Table of Contents
 
 - [Installation](#installation)
 - [Features](#features)
 - [Usage](#usage)
+- [Benchmark](#benchmark)
+- [Downsides and Limitations](#downsides-and-limitations)
 - [Examples](#examples)
-- [Documentation](#documentation)
 
 ## Installation
 
-To use this library, simply get and include the header file `Streamable.hpp` into your project.
+To use this library, simply download and include the header file `Streamable.hpp` into your project or use NuGet to install it.
 
 ## Features
 
-- **fast** - the parsing represents just a simple iteration, knows where every object is and how big it is, for example it reserves the memory for ranges that allow it before adding elements etc...
-- **easy-to-use** - inherit a class and use a macro
-- **single-header** - just copy paste the file in your project
-- **simple format** - contains just the data itself and for the types that have a dynamic size a metadata representing just a uint32_t
-- **has no dependencies** - uses just the standard library
-- **accepts multiple data types** - beside **itself** (as a pointer or not) ofc, **primitive types** (ex.: bool, unsigned int, double etc...), **strings** (ex.: std::string. std::wstring etc...), **any type with standard layout** (ex.: POD structs and classes, enums, etc...), **nested ranges** (ex.: vector, list, vector&lt;list&gt; etc...)
+- **fast** - fast^2, memory-- and easy++ compared to [MsgPack](https://msgpack.org/)
+- **easy-to-use** - inherit a class and use a macro :D
+- **single-header** - just copy paste the file into your project
+- **has no dependencies** - uses the `C++20` standard library and OS native API
+- **cross-platform** -
+
+| Platform | Support | Details                        |
+| -------- | ------- | ------------------------------ |
+| Windows  | Yes     |                                |
+| macOS    | Partial | No UTF16 encoding for memory-- |
+| Linux    | Partial | No UTF16 encoding for memory-- |
+
+- **supports every data type** - beside **itself** (so called "streamables"), **raw/smart pointers** (ex:. `std::unique_ptr`, `std::shared_ptr` etc...), **most STL classes** (`std::tuple`, `std::optional`, `std::variant` etc...), **any nested range** (ex.: `std::wstring`, `std::list`, std::vector&lt;std::list&gt; etc...), **PODs** (ex.: POD structs and classes, enums, etc...), **primitive types** (ex.: `bool`, `unsigned int`, `double` etc...)
 
 ## Usage
 
 1. Inherit from the `IStreamable` class or any class that implements it.
-2. Use the macro **STREAMABLE_DEFINE** where you need to pass the base class and the objects you want to parse
-3. OPTIONAL If there are derived classes as base class pointers to parse you MUST implement **FindDerivedStreamable**
+2. Use the macro **STREAMABLE_DEFINE** where you need to pass your class, the base classes to parse and the objects you want to parse
+3. **OPTIONAL** If "streamables" pointers are (de)serialized you MUST implement **FindDerivedStreamable** (if you forget this, a `static_assert` will appear explaining what is wrong)
+
+## Benchmark
+
+This benchmark contains anything from trivial types to maps of strings to STL containers to vectors of derived classes as base class pointers etc...
+
+| Library        | Time (ms) | Memory Usage (KB) |
+| -------------- | --------- | ----------------- |
+| Streamable     | 0.379     | 85                |
+| nlohmann::json | 2.9       | 187               |
+| MsgPack        | 0.755     | 87                |
+
+## Downsides and Limitations
+
+While **Streamable** offers many benefits, it's essential to consider its limitations as well:
+
+- **Custom Format** - it has a custom but simple format for storing the data
+- **Programming Language** - supports only C++ >= 20
 
 ## Examples
 
 - [Examples](https://github.com/ClaudiuHBann/Streamable_v2/blob/master/Test/Main.cpp) - Mixed
-
-## Documentation
-
-There are 5 macros:
-- **STREAMABLE_DEFINE** - implements the necessary methods for parsing
-- **STREAMABLE_DEFINE_INTRUSIVE** - there are some streamable methods that are not public and needs to be accessed
-- **STREAMABLE_DEFINE_TO_STREAM** - implements the ToStream method
-- **STREAMABLE_DEFINE_FROM_STREAM** - implements the FromStream method
-- **STREAMABLE_DEFINE_FIND_PARSE_SIZE** - implements the FindParseSize method
-
-And a method that MUST be implemented in order to deserialize BaseClass* which returns a default BaseClass*: `FindDerivedStreamable`
