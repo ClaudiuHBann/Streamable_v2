@@ -12,8 +12,6 @@ class IStreamable;
 class StreamReader;
 } // namespace hbann
 
-// std
-
 #ifdef _WIN32
 
 #define NOIME
