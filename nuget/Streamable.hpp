@@ -28,12 +28,22 @@ class IStreamable;
 class StreamReader;
 } // namespace hbann
 
-// std
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#ifdef _WIN32
+
+#define NOIME
+#define NOMCX
+#define NOMINMAX
+#define NOSERVICE
+#define WIN32_LEAN_AND_MEAN
+
+#include <Windows.h>
+
+#else
+#warning "Platform does not support encoding UTF16 strings to save memory!"
+#endif
 
 #include <bit>
 #include <cmath>
-#include <codecvt>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -46,72 +56,78 @@ class StreamReader;
 // Streamable
 inline constexpr auto STREAMABLE_INTERFACE_NAME = "IStreamable";
 
+#define EXPAND(x) x
+#define GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, MACRO, ...) MACRO
+
+// clang-format off
+#define PASTE(...) EXPAND(GET_MACRO(__VA_ARGS__, PASTE9, PASTE8, PASTE7, PASTE6, PASTE5, PASTE4, PASTE3, PASTE2, PASTE1)(__VA_ARGS__))
+// Macro Magik Mate :D
+#define PASTE1(func, v1) func(v1)
+#define PASTE2(func, v1, v2) PASTE1(func, v1) PASTE1(func, v2)
+#define PASTE3(func, v1, v2, v3) PASTE1(func, v1) PASTE2(func, v2, v3)
+#define PASTE4(func, v1, v2, v3, v4) PASTE1(func, v1) PASTE3(func, v2, v3, v4)
+#define PASTE5(func, v1, v2, v3, v4, v5) PASTE1(func, v1) PASTE4(func, v2, v3, v4, v5)
+#define PASTE6(func, v1, v2, v3, v4, v5, v6) PASTE1(func, v1) PASTE5(func, v2, v3, v4, v5, v6)
+#define PASTE7(func, v1, v2, v3, v4, v5, v6, v7) PASTE1(func, v1) PASTE6(func, v2, v3, v4, v5, v6, v7)
+#define PASTE8(func, v1, v2, v3, v4, v5, v6, v7, v8) PASTE1(func, v1) PASTE7(func, v2, v3, v4, v5, v6, v7, v8)
+#define PASTE9(func, v1, v2, v3, v4, v5, v6, v7, v8, v9) PASTE1(func, v1) PASTE8(func, v2, v3, v4, v5, v6, v7, v8, v9)
+// clang-format on
+
+#define TO_STREAM(baseClass)                                                                                           \
+    if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                       \
+    {                                                                                                                  \
+        baseClass::ToStream();                                                                                         \
+    }
+#define TO_STREAM_ALL(...) EXPAND(PASTE(TO_STREAM, __VA_ARGS__))
+
+#define FROM_STREAM(baseClass)                                                                                         \
+    if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                       \
+    {                                                                                                                  \
+        baseClass::FromStream();                                                                                       \
+    }
+#define FROM_STREAM_ALL(...) EXPAND(PASTE(FROM_STREAM, __VA_ARGS__))
+
+// IStreamable by default because it must not be empty and does nothing
+#define STREAMABLE_DEFINE_BASE(...) IStreamable, __VA_ARGS__
+
 #define STREAMABLE_RESET_ACCESS_MODIFIER private:
 
-#define STREAMABLE_DEFINE_FROM_STREAM(baseClass, ...)                                                                  \
+#define STREAMABLE_DEFINE_FROM_STREAM(baseClasses, ...)                                                                \
   protected:                                                                                                           \
     constexpr void FromStream() override                                                                               \
     {                                                                                                                  \
-        if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                   \
-        {                                                                                                              \
-            baseClass::FromStream();                                                                                   \
-        }                                                                                                              \
+        FROM_STREAM_ALL(baseClasses);                                                                                  \
                                                                                                                        \
         mStreamReader.ReadAll(__VA_ARGS__);                                                                            \
     }                                                                                                                  \
                                                                                                                        \
     STREAMABLE_RESET_ACCESS_MODIFIER
 
-#define STREAMABLE_DEFINE_TO_STREAM(baseClass, ...)                                                                    \
+#define STREAMABLE_DEFINE_TO_STREAM(baseClasses, ...)                                                                  \
   protected:                                                                                                           \
     constexpr void ToStream() override                                                                                 \
     {                                                                                                                  \
-        if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                   \
-        {                                                                                                              \
-            baseClass::ToStream();                                                                                     \
-        }                                                                                                              \
-        else                                                                                                           \
-        {                                                                                                              \
-            Reserve(FindParseSize());                                                                                  \
-        }                                                                                                              \
+        TO_STREAM_ALL(baseClasses);                                                                                    \
                                                                                                                        \
         mStreamWriter.WriteAll(__VA_ARGS__);                                                                           \
     }                                                                                                                  \
                                                                                                                        \
     STREAMABLE_RESET_ACCESS_MODIFIER
 
-#define STREAMABLE_DEFINE_FIND_PARSE_SIZE(baseClass, ...)                                                              \
-  protected:                                                                                                           \
-    [[nodiscard]] constexpr ::hbann::Size::size_max FindParseSize() override                                           \
-    {                                                                                                                  \
-        ::hbann::Size::size_max size{};                                                                                \
-        if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                   \
-        {                                                                                                              \
-            size += baseClass::FindParseSize();                                                                        \
-        }                                                                                                              \
-                                                                                                                       \
-        size += ::hbann::SizeFinder::FindParseSize(__VA_ARGS__);                                                       \
-                                                                                                                       \
-        return size;                                                                                                   \
-    }                                                                                                                  \
-                                                                                                                       \
-    STREAMABLE_RESET_ACCESS_MODIFIER
-
 #define STREAMABLE_DEFINE_INTRUSIVE                                                                                    \
   private:                                                                                                             \
-    friend class ::hbann::SizeFinder;                                                                                  \
     friend class ::hbann::StreamReader;                                                                                \
     friend class ::hbann::StreamWriter;
 
-#define STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClass)                                                                  \
-    static_assert(std::derived_from<baseClass, ::hbann::IStreamable>, "The class must inherit a streamable!");
+#define STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClasses)                                                                \
+    static_assert(::hbann::are_derived_from<::hbann::IStreamable, baseClasses>, "The class must inherit a "            \
+                                                                                "streamable!");
 
-#define STREAMABLE_DEFINE(baseClass, ...)                                                                              \
-    STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClass)                                                                      \
+#define STREAMABLE_DEFINE(className, baseClasses, ...)                                                                 \
+    STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClasses)                                                                    \
     STREAMABLE_DEFINE_INTRUSIVE                                                                                        \
-    STREAMABLE_DEFINE_TO_STREAM(baseClass, __VA_ARGS__)                                                                \
-    STREAMABLE_DEFINE_FROM_STREAM(baseClass, __VA_ARGS__)                                                              \
-    STREAMABLE_DEFINE_FIND_PARSE_SIZE(baseClass, __VA_ARGS__)                                                          \
+    STREAMABLE_DEFINE_TO_STREAM(baseClasses, __VA_ARGS__)                                                              \
+    STREAMABLE_DEFINE_FROM_STREAM(baseClasses, __VA_ARGS__)                                                            \
     STREAMABLE_RESET_ACCESS_MODIFIER
 
 namespace hbann
@@ -163,7 +179,7 @@ template <typename Type> struct is_shared_ptr<std::shared_ptr<Type>> : std::true
 template <typename> struct is_basic_string : std::false_type
 {
 };
-template <typename Type> struct is_basic_string<std::basic_string<Type>> : std::true_type
+template <typename... Types> struct is_basic_string<std::basic_string<Types...>> : std::true_type
 {
 };
 } // namespace detail
@@ -178,12 +194,17 @@ template <typename Type> inline constexpr bool is_basic_string_v = detail::is_ba
 
 template <typename> inline constexpr auto always_false = false;
 
+template <typename Base, typename... Derived>
+concept are_derived_from = (std::derived_from<Derived, Base> && ...);
+
 template <typename Type>
 concept is_wstring = std::is_same_v<typename Type::value_type, std::wstring::value_type> && is_basic_string_v<Type>;
 
-template <typename Container>
-concept has_method_reserve =
-    std::ranges::contiguous_range<Container> && requires(Container &aContainer) { aContainer.reserve(size_t(0)); };
+template <typename Type>
+concept is_u16string = std::is_same_v<typename Type::value_type, std::u16string::value_type> && is_basic_string_v<Type>;
+
+template <typename Type>
+concept is_utf16string = is_u16string<Type> || (sizeof(std::wstring::value_type) == 2 && is_wstring<Type>);
 
 template <typename Type>
 concept is_smart_pointer = is_shared_ptr_v<Type> || is_unique_ptr_v<Type>;
@@ -233,75 +254,42 @@ template <typename Type, std::size_t vIndex = 0>
 class Converter
 {
   public:
-    [[nodiscard]] static auto FindUTF8Size(const std::wstring &aString) noexcept
+    template <typename Type> [[nodiscard]] static constexpr auto Encode(const Type &aString)
     {
-        size_t size{};
-        for (size_t i = 0; i < aString.size(); i++)
-        {
-            if (aString[i] <= 0x7F)
-            {
-                size++;
-            }
-            else if (aString[i] <= 0x7FF)
-            {
-                size += 2;
-            }
-            else if (aString[i] <= 0xFFFF)
-            {
-                size += 3;
-            }
-            else
-            {
-                size += 4;
-            }
-        }
+        static_assert(is_utf16string<Type>, "Type must be a UTF16 string!");
 
-        return size;
+#ifdef _WIN32
+        const auto requiredSize = WideCharToMultiByte(CP_UTF8, 0, reinterpret_cast<LPCWCH>(aString.data()),
+                                                      static_cast<int>(aString.size()), nullptr, 0, nullptr, nullptr);
+        std::string str(requiredSize, 0);
+
+        WideCharToMultiByte(CP_UTF8, 0, reinterpret_cast<LPCWCH>(aString.data()), static_cast<int>(aString.size()),
+                            str.data(), requiredSize, nullptr, nullptr);
+        return str;
+#else
+        return std::string_view{reinterpret_cast<const std::string::value_type *>(aString.data()),
+                                aString.size() * sizeof(typename Type::value_type)};
+#endif
     }
 
-    [[nodiscard]] static auto FindUTF16Size(const std::span<const uint8_t> &aString) noexcept
+    template <typename Type> [[nodiscard]] static constexpr auto Decode(const std::span<const uint8_t> aString)
     {
-        size_t size{};
+        static_assert(is_utf16string<Type>, "Type must be a UTF16 string!");
 
-        for (size_t i = 0; i < aString.size(); i++)
-        {
-            if (!(aString[i] & 0x80))
-            {
-                size++;
-            }
-            else if ((aString[i] & 0xE0) == 0xC0)
-            {
-                size++;
-                i++;
-            }
-            else if ((aString[i] & 0xF0) == 0xE0)
-            {
-                size += 2;
-                i += 2;
-            }
-            else if ((aString[i] & 0xF8) == 0xF0)
-            {
-                size += 2;
-                i += 3;
-            }
-        }
+#ifdef _WIN32
+        const auto requiredSize = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<LPCCH>(aString.data()),
+                                                      static_cast<int>(aString.size()), nullptr, 0);
+        Type str(requiredSize, 0);
 
-        return size;
+        MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<LPCCH>(aString.data()), static_cast<int>(aString.size()),
+                            str.data(), requiredSize);
+        return str;
+#else
+        using TypeValueType = typename Type::value_type;
+        return std::basic_string_view<TypeValueType>{reinterpret_cast<const TypeValueType *>(aString.data()),
+                                                     aString.size() / sizeof(TypeValueType)};
+#endif
     }
-
-    [[nodiscard]] static inline std::string ToUTF8(const std::wstring &aString)
-    {
-        return mConverter.to_bytes(aString);
-    }
-
-    [[nodiscard]] static inline std::wstring FromUTF8(const std::span<const uint8_t> &aString)
-    {
-        auto aStringChar = reinterpret_cast<const char *>(aString.data());
-        return mConverter.from_bytes(aStringChar, aStringChar + aString.size());
-    }
-
-  private:
-    static inline std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> mConverter{};
 };
 
 /*
@@ -377,7 +365,7 @@ class Size
         return span{SIZE_AS_CHARS_START, requiredBytes};
     }
 
-    [[nodiscard]] static inline auto MakeSize(const span &aSize) noexcept
+    [[nodiscard]] static inline auto MakeSize(const span aSize) noexcept
     {
         static uint8_t SIZE_AS_CHARS[SIZE_MAX_IN_BYTES]{};
         static auto SIZE = reinterpret_cast<size_max *>(SIZE_AS_CHARS);
@@ -424,25 +412,17 @@ class Size
                 return ((aSize >> 24) & 0x000000FF) | ((aSize >> 8) & 0x0000FF00) | ((aSize << 8) & 0x00FF0000) |
                        ((aSize << 24) & 0xFF000000);
             }
-            else if constexpr (sizeof(size_max) == 8)
+            else
             {
                 return ((aSize & 0xFF00000000000000) >> 56) | ((aSize & 0x00FF000000000000) >> 40) |
                        ((aSize & 0x0000FF0000000000) >> 24) | ((aSize & 0x000000FF00000000) >> 8) |
                        ((aSize & 0x00000000FF000000) << 8) | ((aSize & 0x0000000000FF0000) << 24) |
                        ((aSize & 0x000000000000FF00) << 40) | ((aSize & 0x00000000000000FF) << 56);
             }
-            else
-            {
-                static_assert(always_false<AF>, "Unknown size!");
-            }
-        }
-        else if constexpr (std::endian::native == std::endian::big)
-        {
-            return aSize;
         }
         else
         {
-            static_assert(always_false<AF>, "Unknown endianness!");
+            return aSize;
         }
     }
 };
@@ -464,7 +444,7 @@ class Stream
     {
     }
 
-    constexpr Stream(const span &aSpan) noexcept : mStream(aSpan)
+    constexpr Stream(const span aSpan) noexcept : mStream(aSpan)
     {
     }
 
@@ -479,7 +459,7 @@ class Stream
     }
 
     template <typename FunctionSeek>
-    inline decltype(auto) Peek(const FunctionSeek &aFunctionSeek, const Size::size_max aOffset = 0)
+    inline decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
     {
         const auto readIndex = mReadIndex;
         mReadIndex += aOffset;
@@ -520,7 +500,7 @@ class Stream
         return View()[mReadIndex];
     }
 
-    constexpr decltype(auto) Write(const span &aSpan)
+    constexpr decltype(auto) Write(const span aSpan)
     {
         GetStream().insert(GetStream().end(), aSpan.data(), aSpan.data() + aSpan.size());
         return *this;
@@ -559,17 +539,6 @@ class Stream
 class SizeFinder
 {
   public:
-    template <typename Type, typename... Types>
-    [[nodiscard]] static constexpr Size::size_max FindParseSize(Type &aObject, Types &...aObjects) noexcept
-    {
-        return FindObjectSize<std::remove_cvref_t<Type>>(aObject) + FindParseSize(aObjects...);
-    }
-
-    static constexpr Size::size_max FindParseSize() noexcept
-    {
-        return 0;
-    }
-
     template <typename Type> [[nodiscard]] static constexpr Size::size_max FindRangeRank() noexcept
     {
         using TypeRaw = std::remove_cvref_t<Type>;
@@ -601,118 +570,6 @@ class SizeFinder
         {
             static_assert(always_false<RangeRaw>, "Tried to get the range count from an unknown object!");
         }
-    }
-
-  private:
-    template <typename Type> [[nodiscard]] static constexpr Size::size_max FindObjectSize(Type &aObject) noexcept
-    {
-        if constexpr (is_optional_v<Type>)
-        {
-            return aObject.has_value() ? FindObjectSize(*aObject) : 1;
-        }
-        else if constexpr (is_variant_v<Type>)
-        {
-            Size::size_max size{};
-            std::visit([&](auto &&aArg) { size += FindObjectSize(aArg); }, aObject);
-            return size;
-        }
-        else if constexpr (is_tuple_v<Type>)
-        {
-            Size::size_max size{};
-            std::apply([&](auto &&...aArgs) { size += FindParseSize(aArgs...); }, aObject);
-            return size;
-        }
-        else if constexpr (is_pair_v<Type>)
-        {
-            // we remove the constness of map's pair's key so we can use the already implemented FindParseSize branches
-            auto &first = const_cast<std::remove_const_t<typename Type::first_type> &>(aObject.first);
-            return FindParseSize(first, aObject.second);
-        }
-        else if constexpr (std::ranges::range<Type>)
-        {
-            return FindRangeSize(aObject);
-        }
-        else if constexpr (std::derived_from<Type, IStreamable>)
-        {
-            return FindStreamableSize(aObject);
-        }
-        else if constexpr (is_any_pointer<Type>)
-        {
-            return FindObjectSize(*aObject);
-        }
-        else if constexpr (is_standard_layout_no_pointer<Type>)
-        {
-            return sizeof(Type);
-        }
-        else
-        {
-            static_assert(always_false<Type>, "Type is not accepted!");
-        }
-    }
-
-    template <typename Type>
-    [[nodiscard]] static constexpr Size::size_max FindStreamableSize(Type &aStreamable) noexcept
-    {
-        static_assert(std::derived_from<Type, IStreamable>, "Type is not a streamable!");
-
-        Size::size_max size{};
-        if constexpr (is_any_pointer<Type>)
-        {
-            size = aStreamable->FindParseSize();
-        }
-        else
-        {
-            size = aStreamable.FindParseSize();
-        }
-
-        return Size::FindRequiredBytes(size) + size;
-    }
-
-    template <typename Type> [[nodiscard]] static constexpr Size::size_max FindRangeSize(Type &aRange) noexcept
-    {
-        Size::size_max size = Size::FindRequiredBytes(GetRangeCount(aRange));
-        if constexpr (FindRangeRank<Type>() > 1)
-        {
-            for (auto &object : aRange)
-            {
-                size += FindRangeSize(object);
-            }
-        }
-        else
-        {
-            size += FindRangeRank1Size(aRange);
-        }
-
-        return size;
-    }
-
-    template <typename Type> [[nodiscard]] static constexpr Size::size_max FindRangeRank1Size(Type &aRange) noexcept
-    {
-        static_assert(std::ranges::range<Type>, "Type is not a range!");
-
-        using TypeValueType = typename Type::value_type;
-
-        Size::size_max size{};
-        if constexpr (is_range_standard_layout<Type>)
-        {
-            if constexpr (is_wstring<Type>)
-            {
-                size += Converter::FindUTF8Size(aRange);
-            }
-            else
-            {
-                size += GetRangeCount(aRange) * sizeof(TypeValueType);
-            }
-        }
-        else
-        {
-            for (auto &object : aRange)
-            {
-                size += FindObjectSize(object);
-            }
-        }
-
-        return size;
     }
 };
 
@@ -749,9 +606,9 @@ class StreamReader
     }
 
     template <typename FunctionSeek>
-    inline decltype(auto) Peek(const FunctionSeek &aFunctionSeek, const Size::size_max aOffset = 0)
+    inline decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
     {
-        mStream->Peek(aFunctionSeek, aOffset);
+        mStream->Peek(std::forward<FunctionSeek>(aFunctionSeek), aOffset);
         return *this;
     }
 
@@ -905,7 +762,7 @@ class StreamReader
             }
             else
             {
-                aStreamablePtr = static_cast<TypeNoPtr *>(TypeNoPtr::FindDerivedStreamable(streamReader));
+                aStreamablePtr = dynamic_cast<TypeNoPtr *>(TypeNoPtr::FindDerivedStreamable(streamReader));
             }
         });
 
@@ -921,7 +778,6 @@ class StreamReader
 
         Type range{};
         const auto count = ReadCount();
-        RangeReserve(range, count);
 
         if constexpr (SizeFinder::FindRangeRank<Type>() > 1)
         {
@@ -957,9 +813,9 @@ class StreamReader
 
         using TypeValueType = typename Type::value_type;
 
-        if constexpr (is_wstring<Type>)
+        if constexpr (is_utf16string<Type>)
         {
-            aRange.assign(Converter::FromUTF8(mStream->Read(aCount)));
+            aRange.assign(Converter::Decode<Type>(mStream->Read(aCount)));
         }
         else if constexpr (is_path<Type>)
         {
@@ -993,49 +849,6 @@ class StreamReader
                 Read(object);
                 aRange.insert(std::ranges::cend(aRange), std::move(object));
             }
-        }
-
-        return *this;
-    }
-
-    template <typename Type> constexpr decltype(auto) RangeReserve(Type &aRange, const Size::size_max aCount)
-    {
-        static_assert(std::ranges::range<Type>, "Type is not a range!");
-
-        using TypeValueType = typename Type::value_type;
-
-        Size::size_max size{};
-
-        if constexpr (has_method_reserve<Type>)
-        {
-            if constexpr (std::derived_from<IStreamable, Type>)
-            {
-                Peek([&](auto) {
-                    for (size_t i = 0; i < aCount; i++)
-                    {
-                        const auto sizeCurrent = ReadCount();
-                        size += sizeCurrent;
-                        [[maybe_unused]] auto _ = mStream->Read(sizeCurrent);
-                    }
-                });
-            }
-            else if constexpr (is_standard_layout_no_pointer<TypeValueType>)
-            {
-                if constexpr (is_wstring<Type>)
-                {
-                    Peek([&](auto) { size += Converter::FindUTF16Size(mStream->Read(aCount)); });
-                }
-                else
-                {
-                    size = aCount * sizeof(TypeValueType);
-                }
-            }
-            else
-            {
-                size = aCount;
-            }
-
-            aRange.reserve(size);
         }
 
         return *this;
@@ -1105,11 +918,11 @@ class StreamWriter
   private:
     Stream *mStream{};
 
-    template <typename Type> constexpr decltype(auto) WriteObjectOfKnownSize(const Type &aObject)
+    template <typename Type> constexpr decltype(auto) WriteObjectOfKnownSize(Type &aObject)
     {
         static_assert(is_standard_layout_no_pointer<Type>, "Type is not an object of known size or it is a pointer!");
 
-        const auto objectPtr = reinterpret_cast<const uint8_t *>(&aObject);
+        const auto objectPtr = reinterpret_cast<uint8_t *>(&aObject);
         mStream->Write({objectPtr, sizeof(aObject)});
 
         return *this;
@@ -1159,9 +972,9 @@ class StreamWriter
 
         using TypeValueType = typename Type::value_type;
 
-        if constexpr (is_wstring<Type>)
+        if constexpr (is_utf16string<Type>)
         {
-            WriteRangeStandardLayout(Converter::ToUTF8(aRange));
+            WriteRangeStandardLayout(Converter::Encode(aRange));
         }
         else if constexpr (is_path<Type>)
         {
@@ -1268,7 +1081,6 @@ class StreamWriter
 
 class IStreamable
 {
-    friend class SizeFinder;
     friend class StreamWriter;
     friend class StreamReader;
 
@@ -1302,8 +1114,6 @@ class IStreamable
 
     virtual void ToStream() = 0;
     virtual void FromStream() = 0;
-
-    [[nodiscard]] virtual Size::size_max FindParseSize() = 0;
 
     [[nodiscard]] constexpr Stream &&Release() noexcept
     {
