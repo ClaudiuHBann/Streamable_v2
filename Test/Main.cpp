@@ -22,25 +22,37 @@ inline constexpr auto LICENSE = R"(/*
     SOFTWARE.
 */)";
 
-inline constexpr auto FILES = {"Converter.h",  "StreamableFWD.h", "Size.h",        "Stream.h",
-                               "SizeFinder.h", "StreamReader.h",  "StreamWriter.h"};
+inline constexpr auto FILES = {"Converter.h", "Size.h", "Stream.h", "SizeFinder.h", "StreamReader.h", "StreamWriter.h"};
 
 inline constexpr auto PATH_INPUT = R"(C:\Users\Claudiu HBann\Desktop\Projects\C++\Streamable\Streamable\)";
 inline constexpr auto PATH_OUTPUT = R"(C:\Users\Claudiu HBann\Desktop\Projects\C++\Streamable\nuget\Streamable.hpp)";
 
 inline constexpr const char NS_START[] = "namespace hbann\n{";
 inline constexpr const char NS_END[] = "} // namespace hbann";
+inline constexpr const char PRAGMA_ONCE[] = "#pragma once";
+inline constexpr const char INCLUDE_STREAMABLE_FWD[] = R"(#include "StreamableFWD.h")";
 
 static inline auto ReadAllText(const std::filesystem::path &aPath)
 {
     return (std::ostringstream() << std::ifstream(aPath).rdbuf()).str();
 }
 
+static auto ReadFWD()
+{
+    auto text = ReadAllText(PATH_INPUT + R"(..\StreamableFWD.h)"s);
+    text = text.substr(text.find(PRAGMA_ONCE + "\n"s) + sizeof(PRAGMA_ONCE) + 1);
+    return text;
+}
+
 static auto ReadPCH()
 {
     auto text = ReadAllText(PATH_INPUT + R"(..\pch.h)"s);
-    text = text.substr(text.find("#pragma once"));
+    text = text.substr(text.find(PRAGMA_ONCE));
     text = text.substr(0, text.rfind(NS_END));
+
+    auto start = text.begin() + text.find(INCLUDE_STREAMABLE_FWD);
+    text = text.replace(start, start + sizeof(INCLUDE_STREAMABLE_FWD), ReadFWD());
+
     return text;
 }
 

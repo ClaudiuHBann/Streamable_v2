@@ -24,17 +24,33 @@
 
 namespace hbann
 {
+class Converter;
 class IStreamable;
+class Size;
+class SizeFinder;
+class Stream;
 class StreamReader;
+class StreamWriter;
 } // namespace hbann
 
+// native
 #ifdef _WIN32
 
+#ifndef NOIME
 #define NOIME
+#endif // !NOIME
+
+#ifndef NOMCX
 #define NOMCX
+#endif // !NOMCX
+
+#ifndef NOMINMAX
 #define NOMINMAX
-#define NOSERVICE
+#endif // !NOMINMAX
+
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif // !WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
 
@@ -42,6 +58,7 @@ class StreamReader;
 #warning "Platform does not support encoding UTF16 strings to save memory!"
 #endif
 
+// std
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -231,7 +248,7 @@ concept is_range_standard_layout =
 template <typename Container>
 concept has_method_size = requires(Container &aContainer) { std::ranges::size(aContainer); };
 
-[[nodiscard]] constexpr bool static_equal(const char *aString1, const char *aString2) noexcept
+[[nodiscard]] consteval bool static_equal(const char *aString1, const char *aString2) noexcept
 {
     return *aString1 == *aString2 && (!*aString1 || static_equal(aString1 + 1, aString2 + 1));
 }
@@ -308,14 +325,13 @@ class Size
 
     [[nodiscard]] static constexpr auto FindRequiredBytes(const uint8_t aSize) noexcept
     {
-        const auto size = static_cast<uint8_t>(aSize);
-        if constexpr (sizeof(size_max) == 4)
+        if constexpr (SIZE_MAX_IN_BYTES == 4)
         {
-            return static_cast<size_max>(size >> 6);
+            return static_cast<size_max>(aSize >> 6);
         }
         else
         {
-            return static_cast<size_max>(size >> 5);
+            return static_cast<size_max>(aSize >> 5);
         }
     }
 
@@ -327,8 +343,9 @@ class Size
             // add the bits required to represent the size
             requiredBits += static_cast<size_max>(std::log2(aSize));
         }
+
         // add the bits required to represent the required bytes to store the final value
-        if constexpr (sizeof(size_max) == 4)
+        if constexpr (SIZE_MAX_IN_BYTES == 4)
         {
             requiredBits += 2;
         }
@@ -343,16 +360,16 @@ class Size
 
     [[nodiscard]] static inline auto MakeSize(const size_max aSize) noexcept
     {
-        static uint8_t SIZE_AS_CHARS[SIZE_MAX_IN_BYTES]{};
-        static auto SIZE = reinterpret_cast<size_max *>(SIZE_AS_CHARS);
+        thread_local uint8_t SIZE_AS_CHARS[SIZE_MAX_IN_BYTES]{};
+        auto &SIZE = *reinterpret_cast<size_max *>(SIZE_AS_CHARS);
 
         const auto requiredBytes = FindRequiredBytes(aSize);
         auto SIZE_AS_CHARS_START = SIZE_AS_CHARS + (SIZE_MAX_IN_BYTES - requiredBytes);
 
         // write the size itself
-        *SIZE = ToBigEndian(aSize);
+        SIZE = ToBigEndian(aSize);
         // write the 3 bits representing the bytes required
-        if constexpr (sizeof(size_max) == 4)
+        if constexpr (SIZE_MAX_IN_BYTES == 4)
         {
             *SIZE_AS_CHARS_START |= requiredBytes << 6;
         }
@@ -367,28 +384,25 @@ class Size
 
     [[nodiscard]] static inline auto MakeSize(const span aSize) noexcept
     {
-        static uint8_t SIZE_AS_CHARS[SIZE_MAX_IN_BYTES]{};
-        static auto SIZE = reinterpret_cast<size_max *>(SIZE_AS_CHARS);
-
-        // clear the last size
-        *SIZE = 0;
+        uint8_t SIZE_AS_CHARS[SIZE_MAX_IN_BYTES]{};
+        auto &SIZE = *reinterpret_cast<size_max *>(SIZE_AS_CHARS);
 
         size_max requiredBytes{};
-        const auto size = static_cast<uint8_t>(aSize.front());
-        if constexpr (sizeof(size_max) == 4)
+        if constexpr (SIZE_MAX_IN_BYTES == 4)
         {
-            requiredBytes = static_cast<size_max>(size >> 6);
+            requiredBytes = static_cast<size_max>(aSize.front() >> 6);
         }
         else
         {
-            requiredBytes = static_cast<size_max>(size >> 5);
+            requiredBytes = static_cast<size_max>(aSize.front() >> 5);
         }
-        auto SIZE_AS_CHARS_START = SIZE_AS_CHARS + (SIZE_MAX_IN_BYTES - requiredBytes);
 
+        auto SIZE_AS_CHARS_START = SIZE_AS_CHARS + (SIZE_MAX_IN_BYTES - requiredBytes);
         // copy only the resizeable size
         std::memcpy(SIZE_AS_CHARS_START, aSize.data(), requiredBytes);
+
         // clear the required bytes
-        if constexpr (sizeof(size_max) == 4)
+        if constexpr (SIZE_MAX_IN_BYTES == 4)
         {
             *SIZE_AS_CHARS_START &= 0b00111111;
         }
@@ -397,17 +411,17 @@ class Size
             *SIZE_AS_CHARS_START &= 0b00011111;
         }
 
-        return ToBigEndian(*SIZE);
+        return ToBigEndian(SIZE);
     }
 
   private:
     static inline constexpr auto SIZE_MAX_IN_BYTES = sizeof(size_max);
 
-    template <typename AF = bool> [[nodiscard]] static constexpr size_max ToBigEndian(const size_max aSize) noexcept
+    [[nodiscard]] static constexpr size_max ToBigEndian(const size_max aSize) noexcept
     {
         if constexpr (std::endian::native == std::endian::little)
         {
-            if constexpr (sizeof(size_max) == 4)
+            if constexpr (SIZE_MAX_IN_BYTES == 4)
             {
                 return ((aSize >> 24) & 0x000000FF) | ((aSize >> 8) & 0x0000FF00) | ((aSize << 8) & 0x00FF0000) |
                        ((aSize << 24) & 0xFF000000);
@@ -459,7 +473,7 @@ class Stream
     }
 
     template <typename FunctionSeek>
-    inline decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
+    constexpr decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
     {
         const auto readIndex = mReadIndex;
         mReadIndex += aOffset;
@@ -539,7 +553,7 @@ class Stream
 class SizeFinder
 {
   public:
-    template <typename Type> [[nodiscard]] static constexpr Size::size_max FindRangeRank() noexcept
+    template <typename Type> [[nodiscard]] static consteval Size::size_max FindRangeRank() noexcept
     {
         using TypeRaw = std::remove_cvref_t<Type>;
 
@@ -606,7 +620,7 @@ class StreamReader
     }
 
     template <typename FunctionSeek>
-    inline decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
+    constexpr decltype(auto) Peek(FunctionSeek &&aFunctionSeek, const Size::size_max aOffset = 0)
     {
         mStream->Peek(std::forward<FunctionSeek>(aFunctionSeek), aOffset);
         return *this;
@@ -928,7 +942,7 @@ class StreamWriter
         return *this;
     }
 
-    inline decltype(auto) WriteCount(const Size::size_max aSize)
+    constexpr decltype(auto) WriteCount(const Size::size_max aSize)
     {
         mStream->Write(Size::MakeSize(aSize));
         return *this;
@@ -1087,13 +1101,14 @@ class IStreamable
     Stream mStream;
 
   public:
-    [[nodiscard]] inline decltype(auto) Serialize()
+    [[nodiscard]] constexpr decltype(auto) Serialize()
     {
+        Swap(Stream());
         ToStream();
         return Release();
     }
 
-    inline void Deserialize(Stream &&aStream, const bool aClear = true)
+    constexpr void Deserialize(Stream &&aStream, const bool aClear = true)
     {
         Swap(std::move(aStream));
         FromStream();
