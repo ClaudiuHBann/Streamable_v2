@@ -1,3 +1,4 @@
+
 # Streamable
 
 Fastest, Smallest and Simplest (De)Serializer for C++20 or newer.
@@ -20,38 +21,38 @@ To use this library, simply download and include the header file `Streamable.hpp
 - **fast** - fast^2, memory-- and easy++ compared to [MsgPack](https://msgpack.org/)
 - **easy-to-use** - inherit a class and use a macro :D
 - **single-header** - just copy paste the file into your project
-- **has no dependencies** - uses the `C++20` standard library and OS native API
+- **has no dependencies** - uses the `C++20` standard library and OS native API for best performance
 - **cross-platform** -
 
-| Platform | Support | Details                        |
-| -------- | ------- | ------------------------------ |
-| Windows  | Yes     |                                |
-| macOS    | Partial | No UTF16 encoding for memory-- |
-| Linux    | Partial | No UTF16 encoding for memory-- |
+| Platform      | Support      | Details                        |
+|---------------|--------------|--------------------------------|
+| Windows       | Yes          |                                |
+| macOS         | Partial      | No UTF16 encoding for memory-- |
+| Linux         | Partial      | No UTF16 encoding for memory-- |
 
-- **supports every data type** - beside **itself** (so called "streamables"), **raw/smart pointers** (ex:. `std::unique_ptr`, `std::shared_ptr` etc...), **most STL classes** (`std::tuple`, `std::optional`, `std::variant` etc...), **any nested range** (ex.: `std::wstring`, `std::list`, std::vector&lt;std::list&gt; etc...), **PODs** (ex.: POD structs and classes, enums, etc...), **primitive types** (ex.: `bool`, `unsigned int`, `double` etc...)
+- **supports every data type** - beside **itself** (so called "streamables"), **raw/smart pointers** (ex:. `std::unique_ptr`, `std::shared_ptr` etc...), **most STL classes** (`std::tuple`, `std::optional`, `std::variant` etc...), **any nested range** (ex.: `std::wstring`, `std::map`, std::vector&lt;std::list&gt; etc...), **PODs** (ex.: POD structs and classes, enums, etc...), **primitive types** (ex.: `bool`, `unsigned int`, `double` etc...)
 
 ## Usage
 
 1. Inherit from the `IStreamable` class or any class that implements it.
-2. Use the macro **STREAMABLE_DEFINE** where you need to pass your class, the base classes to parse and the objects you want to parse
-3. **OPTIONAL** If "streamables" pointers are (de)serialized you MUST implement **FindDerivedStreamable** (if you forget this, a `static_assert` will appear explaining what is wrong)
+2. Use the macro **STREAMABLE_DEFINE** and pass your class and the objects you want to parse
+3. **OPTIONAL** For (de)serialization of inherited classes use **STREAMABLE_DEFINE_BASE** and pass the classes
+4. **OPTIONAL** If "streamables" pointers are (de)serialized you MUST implement **FindDerivedStreamable** (if you forget this, don't worry, a `static_assert` will scream :O )
 
 ## Benchmark
 
 This benchmark contains anything from trivial types to maps of strings to STL containers to vectors of derived classes as base class pointers etc...
 
-| Library        | Time (ms) | Memory Usage (KB) |
-| -------------- | --------- | ----------------- |
-| Streamable     | 0.379     | 85                |
-| nlohmann::json | 2.9       | 187               |
-| MsgPack        | 0.755     | 87                |
+| Library           | Time (ms) | Memory Usage (KB) |
+|-------------------|-----------|-------------------|
+| Streamable        | 0.379     | 85                |
+| nlohmann::json    | 2.9       | 187               |
+| MsgPack           | 0.755     | 87                |
 
 ## Downsides and Limitations
 
 While **Streamable** offers many benefits, it's essential to consider its limitations as well:
-
-- **Custom Format** - it has a custom but simple format for storing the data
+-  **Custom Format** - it has a custom but simple format for storing the data
 - **Programming Language** - supports only C++ >= 20
 
 ## Examples

@@ -71,14 +71,12 @@ class StreamWriter;
 #include <vector>
 
 // Streamable
-inline constexpr auto STREAMABLE_INTERFACE_NAME = "IStreamable";
-
 #define EXPAND(x) x
 #define GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, MACRO, ...) MACRO
 
 // clang-format off
 #define PASTE(...) EXPAND(GET_MACRO(__VA_ARGS__, PASTE9, PASTE8, PASTE7, PASTE6, PASTE5, PASTE4, PASTE3, PASTE2, PASTE1)(__VA_ARGS__))
-// Macro Magik Mate :D
+
 #define PASTE1(func, v1) func(v1)
 #define PASTE2(func, v1, v2) PASTE1(func, v1) PASTE1(func, v2)
 #define PASTE3(func, v1, v2, v3) PASTE1(func, v1) PASTE2(func, v2, v3)
@@ -90,41 +88,64 @@ inline constexpr auto STREAMABLE_INTERFACE_NAME = "IStreamable";
 #define PASTE9(func, v1, v2, v3, v4, v5, v6, v7, v8, v9) PASTE1(func, v1) PASTE8(func, v2, v3, v4, v5, v6, v7, v8, v9)
 // clang-format on
 
-#define TO_STREAM(baseClass)                                                                                           \
-    if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                       \
-    {                                                                                                                  \
-        baseClass::ToStream();                                                                                         \
-    }
-#define TO_STREAM_ALL(...) EXPAND(PASTE(TO_STREAM, __VA_ARGS__))
+#define TS_BASE(base) base::ToStream();
+#define TS_BASES(...) EXPAND(PASTE(TS_BASE, __VA_ARGS__))
 
-#define FROM_STREAM(baseClass)                                                                                         \
-    if constexpr (!::hbann::static_equal(#baseClass, STREAMABLE_INTERFACE_NAME))                                       \
-    {                                                                                                                  \
-        baseClass::FromStream();                                                                                       \
-    }
-#define FROM_STREAM_ALL(...) EXPAND(PASTE(FROM_STREAM, __VA_ARGS__))
+#define FS_BASE(base) base::FromStream();
+#define FS_BASES(...) EXPAND(PASTE(FS_BASE, __VA_ARGS__))
 
-// IStreamable by default because it must not be empty and does nothing
-#define STREAMABLE_DEFINE_BASE(...) IStreamable, __VA_ARGS__
+#define STATIC_ASSERT_HAS_ISTREAMABLE_BASE(...)                                                                        \
+    static_assert(::hbann::are_derived_from_istreamable<__VA_ARGS__>, "The class must inherit a streamable!");
+
+#define STATIC_ASSERT_DONT_PASS_ISTREAMABLE_AS_BASE(...)                                                               \
+    static_assert(!::hbann::are_same_as_istreamable<__VA_ARGS__>, "The class ::hbann::IStreamable should not be a "    \
+                                                                  "base!");
 
 #define STREAMABLE_RESET_ACCESS_MODIFIER private:
 
-#define STREAMABLE_DEFINE_FROM_STREAM(baseClasses, ...)                                                                \
+#define STREAMABLE_DEFINE_TO_STREAM_BASES(...)                                                                         \
   protected:                                                                                                           \
-    constexpr void FromStream() override                                                                               \
+    void ToStreamBases() override                                                                                      \
     {                                                                                                                  \
-        FROM_STREAM_ALL(baseClasses);                                                                                  \
+        TS_BASES(__VA_ARGS__);                                                                                         \
+    }                                                                                                                  \
+                                                                                                                       \
+    STREAMABLE_RESET_ACCESS_MODIFIER
+
+#define STREAMABLE_DEFINE_FROM_STREAM_BASES(...)                                                                       \
+  protected:                                                                                                           \
+    void FromStreamBases() override                                                                                    \
+    {                                                                                                                  \
+        FS_BASES(__VA_ARGS__);                                                                                         \
+    }                                                                                                                  \
+                                                                                                                       \
+    STREAMABLE_RESET_ACCESS_MODIFIER
+
+#define STREAMABLE_DEFINE_BASE(...)                                                                                    \
+    STATIC_ASSERT_HAS_ISTREAMABLE_BASE(__VA_ARGS__)                                                                    \
+    STATIC_ASSERT_DONT_PASS_ISTREAMABLE_AS_BASE(__VA_ARGS__)                                                           \
+                                                                                                                       \
+    STREAMABLE_DEFINE_TO_STREAM_BASES(__VA_ARGS__)                                                                     \
+    STREAMABLE_DEFINE_FROM_STREAM_BASES(__VA_ARGS__)                                                                   \
+                                                                                                                       \
+    STREAMABLE_RESET_ACCESS_MODIFIER
+
+#define STREAMABLE_DEFINE_FROM_STREAM(className, ...)                                                                  \
+  protected:                                                                                                           \
+    void FromStream() override                                                                                         \
+    {                                                                                                                  \
+        className::FromStreamBases();                                                                                  \
                                                                                                                        \
         mStreamReader.ReadAll(__VA_ARGS__);                                                                            \
     }                                                                                                                  \
                                                                                                                        \
     STREAMABLE_RESET_ACCESS_MODIFIER
 
-#define STREAMABLE_DEFINE_TO_STREAM(baseClasses, ...)                                                                  \
+#define STREAMABLE_DEFINE_TO_STREAM(className, ...)                                                                    \
   protected:                                                                                                           \
-    constexpr void ToStream() override                                                                                 \
+    void ToStream() override                                                                                           \
     {                                                                                                                  \
-        TO_STREAM_ALL(baseClasses);                                                                                    \
+        className::ToStreamBases();                                                                                    \
                                                                                                                        \
         mStreamWriter.WriteAll(__VA_ARGS__);                                                                           \
     }                                                                                                                  \
@@ -136,15 +157,12 @@ inline constexpr auto STREAMABLE_INTERFACE_NAME = "IStreamable";
     friend class ::hbann::StreamReader;                                                                                \
     friend class ::hbann::StreamWriter;
 
-#define STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClasses)                                                                \
-    static_assert(::hbann::are_derived_from<::hbann::IStreamable, baseClasses>, "The class must inherit a "            \
-                                                                                "streamable!");
-
-#define STREAMABLE_DEFINE(className, baseClasses, ...)                                                                 \
-    STATIC_ASSERT_HAS_ISTREAMABLE_BASE(baseClasses)                                                                    \
+#define STREAMABLE_DEFINE(className, ...)                                                                              \
     STREAMABLE_DEFINE_INTRUSIVE                                                                                        \
-    STREAMABLE_DEFINE_TO_STREAM(baseClasses, __VA_ARGS__)                                                              \
-    STREAMABLE_DEFINE_FROM_STREAM(baseClasses, __VA_ARGS__)                                                            \
+                                                                                                                       \
+    STREAMABLE_DEFINE_TO_STREAM(className, __VA_ARGS__)                                                                \
+    STREAMABLE_DEFINE_FROM_STREAM(className, __VA_ARGS__)                                                              \
+                                                                                                                       \
     STREAMABLE_RESET_ACCESS_MODIFIER
 
 namespace hbann
@@ -211,9 +229,6 @@ template <typename Type> inline constexpr bool is_basic_string_v = detail::is_ba
 
 template <typename> inline constexpr auto always_false = false;
 
-template <typename Base, typename... Derived>
-concept are_derived_from = (std::derived_from<Derived, Base> && ...);
-
 template <typename Type>
 concept is_wstring = std::is_same_v<typename Type::value_type, std::wstring::value_type> && is_basic_string_v<Type>;
 
@@ -233,6 +248,12 @@ template <typename Derived, typename Base>
 concept is_derived_from_pointer =
     std::is_pointer_v<Derived> && std::derived_from<std::remove_pointer_t<Derived>, Base> ||
     (is_smart_pointer<Derived> && std::derived_from<typename Derived::element_type, Base>);
+
+template <typename... Types>
+concept are_derived_from_istreamable = (std::derived_from<Types, IStreamable> && ...);
+
+template <typename... Types>
+concept are_same_as_istreamable = (std::is_same_v<Types, IStreamable> || ...);
 
 template <typename Type>
 concept is_standard_layout_no_pointer = std::is_standard_layout_v<Type> && !is_any_pointer<Type>;
@@ -942,7 +963,7 @@ class StreamWriter
         return *this;
     }
 
-    constexpr decltype(auto) WriteCount(const Size::size_max aSize)
+    inline decltype(auto) WriteCount(const Size::size_max aSize)
     {
         mStream->Write(Size::MakeSize(aSize));
         return *this;
@@ -1129,6 +1150,14 @@ class IStreamable
 
     virtual void ToStream() = 0;
     virtual void FromStream() = 0;
+
+    virtual void ToStreamBases()
+    {
+    }
+
+    virtual void FromStreamBases()
+    {
+    }
 
     [[nodiscard]] constexpr Stream &&Release() noexcept
     {

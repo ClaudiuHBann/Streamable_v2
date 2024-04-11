@@ -2,15 +2,16 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <metadata>
         <id>Streamable</id>
-        <version>1.3.0</version>
+        <version>1.4.0</version>
 	<authors>Claudiu HBann</authors>
         <description>Fastest, Smallest and Simplest (De)Serializer for C++20 or newer.</description>
 	<copyright>Copyright (c) Claudiu HBann 2024</copyright>
 	<projectUrl>https://github.com/ClaudiuHBann/Streamable_v2</projectUrl>
 	<readme>README.md</readme>
 	<repository type="git" url="https://github.com/ClaudiuHBann/Streamable_v2" />
-	<releaseNotes>added support for `STREAMABLE_DEFINE` to parse multiple streamables
-removed codecvt (will be removed in C++26), but added OS native API</releaseNotes>
+	<releaseNotes>fixed a serialization bug
+added support for parsing multiple inherited classes
+fixed macro redefinition</releaseNotes>
 	<license type="expression">MIT</license>
 	<tags>fast, parser, simple, format, easy-to-use, no-dependencies, single-header, C++20</tags>
     </metadata>
